@@ -23,5 +23,7 @@
 #include <inttypes.h>
 int8_t scsiToolboxEnabled(void);
 int scsiToolboxCommand(void);
+// Close the file a transfer left open, before the SD card is remounted
+void scsiToolboxCloseFile(void);
 
 #endif

@@ -77,6 +77,10 @@
 #endif
 
 #include "ui.h"
+#include "ZuluSCSI.h"
+extern "C" {
+#include <toolbox.h>
+}
 
 SdFs SD;
 FsFile g_logfile;
@@ -2365,6 +2369,92 @@ static bool rescanSDCard()
   return true;
 }
 
+static bool g_rescan_requested = false;
+static uint16_t g_rescan_generation = 0;
+static uint8_t g_rescan_result = ZULUSCSI_RESCAN_OK;
+
+void zuluscsi_request_rescan(const char *source)
+{
+  logmsg("SD card rescan requested from ", source);
+  g_rescan_requested = true;
+}
+
+uint16_t zuluscsi_rescan_generation()
+{
+  return g_rescan_generation;
+}
+
+uint8_t zuluscsi_rescan_result()
+{
+  return g_rescan_result;
+}
+
+// Serve a rescan request between commands only: the rescan closes and reopens
+// every image, so the bus must be free and no SD card transfer pending.
+// Selections that arrive while it runs are not answered.
+static void rescan_poll(bool is_initiator)
+{
+  if (!g_rescan_requested || g_rebooting)
+  {
+    return;
+  }
+
+  if (is_initiator || g_msc_initiator)
+  {
+    logmsg("SD card rescan ignored in initiator mode");
+    g_rescan_requested = false;
+    return;
+  }
+
+  if (scsiDev.phase != BUS_FREE || !scsiIsReadFinished(NULL) || !scsiIsWriteFinished(NULL))
+  {
+    return;
+  }
+
+  g_rescan_requested = false;
+  scsiToolboxCloseFile();
+#if defined(CONTROL_BOARD)
+  if (g_pendingLoadIndex != -1)
+  {
+    logmsg("SD card rescan: dropping the pending image load for SCSI ID ", g_pendingLoadIndex);
+    g_pendingLoadIndex = -1;
+  }
+#endif
+
+  if (!g_sdcard_present)
+  {
+    g_rescan_result = ZULUSCSI_RESCAN_NO_CARD;
+  }
+  else
+  {
+    logmsg("Rescanning SD card");
+#ifdef ZULUCONTROL_FIRMWARE
+    zuluWebUINotifySDCardRemoved();
+#endif
+    if (!rescanSDCard())
+    {
+      // The main loop keeps trying to remount, as after a card removal
+      logmsg("SD card rescan: card did not mount");
+      if (g_displayEnabled)
+      {
+        sdCardStateChanged(g_sdcard_present, g_romdrive_active);
+      }
+      g_rescan_result = ZULUSCSI_RESCAN_NO_CARD;
+    }
+    else if (!scsiDiskCheckAnyImagesConfigured())
+    {
+      g_rescan_result = ZULUSCSI_RESCAN_NO_IMAGES;
+    }
+    else
+    {
+      g_rescan_result = ZULUSCSI_RESCAN_OK;
+    }
+  }
+
+  g_rescan_generation++;
+  logmsg("SD card rescan done, generation ", (int)g_rescan_generation, ", result ", (int)g_rescan_result);
+}
+
 void control_disk_swap()
 {
 #if defined(CONTROL_BOARD)
@@ -2530,6 +2620,7 @@ extern "C" void zuluscsi_main_loop(void)
       blinkStatus(BLINK_ERROR_NO_SD_CARD);
     }
   }
+  rescan_poll(is_initiator);
   iotrace_sd_maintenance_us = (uint32_t)(iotrace_now_us() - iotrace_t0);
   iotrace_loop_account(IOTRACE_BUCKET_SD_MAINTENANCE, iotrace_sd_maintenance_us);
 

@@ -404,6 +404,18 @@ static void onSendFilePrep(char * dir_name)
     }
 }
 
+extern "C" void scsiToolboxCloseFile(void)
+{
+    if (gFile.isOpen())
+    {
+        if (gFile.isWritable())
+        {
+            logmsg("Toolbox: closing a file that was still open for writing");
+        }
+        gFile.close();
+    }
+}
+
 static void onSendFileEnd(void)
 {
     gFile.sync();
