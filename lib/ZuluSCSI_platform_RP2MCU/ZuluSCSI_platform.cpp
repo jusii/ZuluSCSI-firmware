@@ -92,6 +92,7 @@ uint32_t g_i2c_bus_speed = 0;
 extern "C" {
 #include "timings_RP2MCU.h"
 extern bool g_rebooting;
+void zuluscsi_request_rescan(const char *source);
 static bool g_uf2_mode = false;
 const char *g_platform_name = PLATFORM_NAME;
 bool g_scsi_initiator = false;
@@ -133,7 +134,8 @@ typedef enum
     USB_INPUT_BUTTON_3,
     USB_INPUT_BUTTON_4,
     USB_INPUT_MEDIA_SUBMENU,
-    USB_INPUT_ERASE_SD_CARD
+    USB_INPUT_ERASE_SD_CARD,
+    USB_INPUT_RESCAN_SD_CARD
 }
 usb_input_type_t;
 
@@ -2099,6 +2101,13 @@ static usb_input_type_t serial_menu(menu_context_t context)
                 else
                     match_keyed = false;
                 break;
+            case 'C':
+            case 'c':
+                if (context ==  MENU_CONTEXT_TARGET_MAIN)
+                    input_type = USB_INPUT_RESCAN_SD_CARD;
+                else
+                    match_keyed = false;
+                break;
             case 'Y':
             case 'y':
                 yes_keyed = true;
@@ -2139,6 +2148,7 @@ static usb_input_type_t serial_menu(menu_context_t context)
                 (context == MENU_CONTEXT_TARGET_MAIN && g_enabled_eject_buttons & 8)   ? "    '4' - push function button 4 (eject, switch image)\r\n" : "",
                 (context == MENU_CONTEXT_TARGET_MAIN && g_enabled_cow_buttons & 8)     ? "    '4' - push function button 4 (cow init, currently ": "", (g_enabled_cow_buttons & 8) ? ((g_cow_button_state & 8) ? "enabled)\r\n" : "disabled)\r\n") : "",
 
+                (context == MENU_CONTEXT_TARGET_MAIN) ? "    'c' - rescan the SD card (images, Create_ files, zuluscsi.ini)\r\n" : "",
                 (context == MENU_CONTEXT_TARGET_MAIN) ? "    'm' - media management (image select, eject, insert)\r\n" : "",
                 (context == MENU_CONTEXT_TARGET_MAIN) ? "    't' - erase (TRIM) entire SD card -- DESTROYS ALL DATA\r\n" : ""
                 "  press 'y' after a command to confirm and execute"
@@ -2232,6 +2242,9 @@ static usb_input_type_t serial_menu(menu_context_t context)
                 case USB_INPUT_ERASE_SD_CARD:
                     serialEraseMenuEnter();
                     break;
+                case USB_INPUT_RESCAN_SD_CARD:
+                    zuluscsi_request_rescan("console");
+                    break;
                 default:
                     input_type = USB_INPUT_NONE;
             }
@@ -2307,6 +2320,9 @@ static usb_input_type_t serial_menu(menu_context_t context)
                     break;
                 case USB_INPUT_MEDIA_SUBMENU:
                     logmsg("Enter media management submenu, press 'y' to engage or any key to clear");
+                    break;
+                case USB_INPUT_RESCAN_SD_CARD:
+                    logmsg("Rescan SD card requested, press 'y' to engage or any key to clear");
                     break;
                 default:
                     input_type = USB_INPUT_NONE;
