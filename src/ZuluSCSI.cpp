@@ -2336,6 +2336,35 @@ extern "C" void zuluscsi_setup(void)
   logmsg("Firmware initialization complete!");
 }
 
+// Mount the SD card and reopen the images it holds, for a card inserted while
+// running. Reloads zuluscsi.ini and processes Create_ requests; the system
+// settings read at power-on stay as they are. Returns false if no card mounted.
+static bool rescanSDCard()
+{
+  g_sdcard_present = mountSDCard();
+  if (!g_sdcard_present)
+  {
+    return false;
+  }
+
+  blink_cancel();
+  LED_OFF();
+  logmsg("SD card reinit succeeded");
+  print_sd_info();
+  if (g_displayEnabled)
+  {
+    sdCardStateChanged(g_sdcard_present, g_romdrive_active);
+  }
+  reinitSCSI(false); // card inserted while running -- scsiDev.data is in use
+  init_logfile();
+  init_eject_button();
+  blinkStatus(BLINK_STATUS_OK);
+#ifdef ZULUCONTROL_FIRMWARE
+  zuluWebUINotifySDCardReady();
+#endif
+  return true;
+}
+
 void control_disk_swap()
 {
 #if defined(CONTROL_BOARD)
@@ -2492,29 +2521,11 @@ extern "C" void zuluscsi_main_loop(void)
     // Try to remount SD card
     if ((uint32_t)(millis() - sd_card_check_time) > SDCARD_POLL_INSERT_INTERVAL)
     {
-      g_sdcard_present = mountSDCard();
+      rescanSDCard();
       sd_card_check_time = millis();
     }
 
-    if (g_sdcard_present)
-    {
-      blink_cancel();
-      LED_OFF();
-      logmsg("SD card reinit succeeded");
-      print_sd_info();
-      if (g_displayEnabled)
-      {
-        sdCardStateChanged(g_sdcard_present, g_romdrive_active);
-      }
-      reinitSCSI(false); // card inserted while running -- scsiDev.data is in use
-      init_logfile();
-      init_eject_button();
-      blinkStatus(BLINK_STATUS_OK);
-#ifdef ZULUCONTROL_FIRMWARE
-      zuluWebUINotifySDCardReady();
-#endif
-    }
-    else if (!g_romdrive_active)
+    if (!g_sdcard_present && !g_romdrive_active)
     {
       blinkStatus(BLINK_ERROR_NO_SD_CARD);
     }
