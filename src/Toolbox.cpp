@@ -331,6 +331,15 @@ void onGetFile10(char * dir_name) {
             return;
         }
     }
+    else if (!gFile.isOpen())
+    {
+        // Closed at the end of the transfer or by an SD card rescan,
+        // a new transfer has to start at offset 0
+        scsiDev.status = CHECK_CONDITION;
+        scsiDev.target->sense.code = ILLEGAL_REQUEST;
+        scsiDev.phase = STATUS;
+        return;
+    }
 
     uint32_t file_total = gFile.size();
         uint32_t byte_offset = offset * 4096;
@@ -349,6 +358,14 @@ void onGetFile10(char * dir_name) {
     memset(scsiDev.data, 0, bytes_requested);
     gFile.seekSet(byte_offset);
     int bytes_read = gFile.read(scsiDev.data, bytes_requested);
+    if (bytes_read < 0)
+    {
+        gFile.close();
+        scsiDev.status = CHECK_CONDITION;
+        scsiDev.target->sense.code = ILLEGAL_REQUEST;
+        scsiDev.phase = STATUS;
+        return;
+    }
     if(byte_offset + bytes_read >= file_total) // transfer done, close.
     {
         gFile.close();
