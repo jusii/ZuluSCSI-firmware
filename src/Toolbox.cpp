@@ -21,6 +21,7 @@
 #include "Toolbox.h"
 #include "ZuluSCSI_disk.h"
 #include "ZuluSCSI_cdrom.h"
+#include "ZuluSCSI.h"
 #include "ZuluSCSI_log.h"
 #include <minIni.h>
 #include <SdFat.h>
@@ -229,19 +230,24 @@ static void onListDevices()
     scsiDev.phase = DATA_IN;
 }
 
-// Returns API version and capability flags
+// Returns API version and capability flags, and the state of SD card rescans
 static void onGetCapabilities()
 {
     memset(scsiDev.data, 0, 8);
     scsiDev.data[0] = TOOLBOX_API_VERSION;
-    scsiDev.data[1] = TOOLBOX_CAP_LARGE_TRANSFERS | TOOLBOX_CAP_LARGE_SEND;
-    // bytes 2-7 reserved
+    scsiDev.data[1] = TOOLBOX_CAP_LARGE_TRANSFERS | TOOLBOX_CAP_LARGE_SEND | TOOLBOX_CAP_RESCAN;
+    // bytes 2-3: number of completed rescans, big endian; byte 4: result of the last one
+    uint16_t generation = zuluscsi_rescan_generation();
+    scsiDev.data[2] = generation >> 8;
+    scsiDev.data[3] = generation & 0xff;
+    scsiDev.data[4] = zuluscsi_rescan_result();
+    // bytes 5-7 reserved
     scsiDev.dataLen = 8;
     scsiDev.phase = DATA_IN;
 }
 
 // Handle 0xD9 metadata command with subcommands
-// CDB[1] = subcommand
+// CDB[1] = subcommand (LIST_DEVICES, GET_CAPABILITIES, RESCAN)
 // CDB[8] = allocation length (0 = 8 for backward compatibility)
 static void onMetadataCommand()
 {
@@ -279,6 +285,13 @@ static void onMetadataCommand()
             // Truncate to requested allocation length
             if (scsiDev.dataLen > alloc_len)
                 scsiDev.dataLen = alloc_len;
+            break;
+        case TOOLBOX_SUBCMD_RESCAN:
+            // Completes at once; the rescan runs after the bus is free.
+            // GET_CAPABILITIES shows when it has finished.
+            dbgmsg("TOOLBOX_METADATA: RESCAN");
+            zuluscsi_request_rescan("toolbox");
+            scsiDev.phase = STATUS;
             break;
         default:
             dbgmsg("TOOLBOX_METADATA: Unknown subcommand ", subcommand);
