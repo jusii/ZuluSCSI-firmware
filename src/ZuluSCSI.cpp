@@ -1179,7 +1179,12 @@ bool findHDDImages()
       {
         logmsg("-- Special filename: '", name, "'");
         char imgname[MAX_FILE_PATH+1];
-        if (createImage(name, imgname))
+        // The request names its files relative to the directory being
+        // scanned, which is not the root for Dir= and Dir1..Dir9
+        SD.chdir(imgdir);
+        bool created = createImage(name, imgname);
+        SD.chdir("/");
+        if (created)
         {
           // Created new image file, use its name instead of the name of the command file
           strncpy(name, imgname, MAX_FILE_PATH);
