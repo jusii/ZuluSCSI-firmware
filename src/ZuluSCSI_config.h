@@ -45,7 +45,12 @@
 #define DEF_STRINGFY(DEF) STRINGFY(DEF)
 #define STRINGFY(STR) #STR
 #define FIRMWARE_NAME_PREFIX DEF_STRINGFY(BUILD_ENV)
-#define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
+// Builds outside the release line name themselves in the version string,
+// e.g. 2026.09.28-release-amix; override with -DFW_VER_BUILD_TAG='"name"'
+#ifndef FW_VER_BUILD_TAG
+#define FW_VER_BUILD_TAG "amix"
+#endif
+#define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX "-" FW_VER_BUILD_TAG
 #define INQUIRY_NAME  "ZuluSCSI"
 #define TOOLBOX_API 0
 
