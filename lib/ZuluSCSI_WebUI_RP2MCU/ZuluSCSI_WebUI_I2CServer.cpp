@@ -97,19 +97,36 @@ bool webuiI2CSend(uint8_t command, const uint8_t *payload, uint16_t length)
         length = WEBUI_MAX_MSG_SIZE;
     }
 
-    g_wire.beginTransmission(WEBUI_I2C_SLAVE_ADDR);
-    g_wire.write(command);
-    g_wire.write((uint8_t)(length >> 8));
-    g_wire.write((uint8_t)(length & 0xFF));
-    if (length > 0 && payload != nullptr)
+    // Wire silently drops bytes beyond its WIRE_BUFFER_SIZE buffer, so a longer
+    // message goes out as several transmissions. The client reassembles it by
+    // the length in the header; only a read from it starts a new message.
+    uint16_t sent = 0;
+    bool first = true;
+    while (first || (payload != nullptr && sent < length))
     {
-        g_wire.write(payload, (size_t)length);
-    }
-    uint8_t result = g_wire.endTransmission();
-    if (result != 0)
-    {
-        g_webui_present = false;
-        return false;
+        size_t room = WIRE_BUFFER_SIZE;
+        g_wire.beginTransmission(WEBUI_I2C_SLAVE_ADDR);
+        if (first)
+        {
+            g_wire.write(command);
+            g_wire.write((uint8_t)(length >> 8));
+            g_wire.write((uint8_t)(length & 0xFF));
+            room -= 3;
+            first = false;
+        }
+        if (payload != nullptr && sent < length)
+        {
+            size_t chunk = length - sent;
+            if (chunk > room) chunk = room;
+            g_wire.write(payload + sent, chunk);
+            sent += chunk;
+        }
+        uint8_t result = g_wire.endTransmission();
+        if (result != 0)
+        {
+            g_webui_present = false;
+            return false;
+        }
     }
     g_webui_present = true;
     return true;
