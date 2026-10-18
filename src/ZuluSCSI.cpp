@@ -1129,6 +1129,11 @@ bool findHDDImages()
   uint8_t eject_btn_set = 0;
   uint8_t last_removable_device = 255;
 
+  // First sectors of the images that Create_ requests made during this scan.
+  // The directory walk can meet a new image again after its request mapped it.
+  uint32_t created_sectors[8];
+  int created_count = 0;
+
   // Custom-inquiry state is reset once per full config-load pass in
   // readSCSIDeviceConfig() (which runs right before this function, see
   // reinitSCSI()), not here -- scsiDiskLoadConfig() also calls
@@ -1173,7 +1178,19 @@ bool findHDDImages()
     if(!file.isDir() || scsiDiskFolderContainsCueSheet(&file) || scsiDiskFolderIsTapeFolder(&file))
     {
       file.getName(name, MAX_FILE_PATH+1);
+      uint32_t first_sector = file.firstSector();
       file.close();
+
+      bool created_earlier = false;
+      for (int i = 0; i < created_count && first_sector != 0; i++)
+      {
+        if (created_sectors[i] == first_sector) created_earlier = true;
+      }
+      if (created_earlier)
+      {
+        dbgmsg("-- Skipping ", name, ", mapped when it was created");
+        continue;
+      }
 
       // Special filename for clearing any previously programmed ROM drive
       if(strcasecmp(name, "CLEAR_ROM") == 0)
@@ -1192,6 +1209,12 @@ bool findHDDImages()
         // scanned, which is not the root for Dir= and Dir1..Dir9
         SD.chdir(imgdir);
         bool created = createImage(name, imgname);
+        if (created && created_count < (int)(sizeof(created_sectors) / sizeof(created_sectors[0]))
+            && file.open(imgname, O_RDONLY))
+        {
+          created_sectors[created_count++] = file.firstSector();
+          file.close();
+        }
         SD.chdir("/");
         if (created)
         {
