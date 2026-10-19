@@ -47,6 +47,7 @@
 extern SdFs SD;
 
 extern "C" void zuluscsi_request_rescan(const char *source);
+extern bool g_i2c_claimed;
 extern "C" uint16_t zuluscsi_rescan_generation();
 extern "C" uint8_t zuluscsi_rescan_result();
 
@@ -84,10 +85,12 @@ static bool        g_has_static_ip = false;
 static uint32_t    g_last_poll_ms    = 0;
 static uint32_t    g_last_status_ms  = 0;
 static uint32_t    g_wait_start_ms   = 0;
+static uint32_t    g_last_detect_ms  = 0;
 
 #define POLL_INTERVAL_MS   150
 #define STATUS_INTERVAL_MS 3000
 #define WAIT_TIMEOUT_MS    5000
+#define DETECT_INTERVAL_MS 1000
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -695,6 +698,17 @@ void zuluWebUITask()
     {
         case WebUIState::Searching:
         {
+            // A board that starts with this one misses the probe at boot,
+            // which leaves the bus down; probe again until it answers.
+            if (!g_i2c_claimed)
+            {
+                if (!elapsed(g_last_detect_ms, DETECT_INTERVAL_MS)) break;
+                g_last_detect_ms = ms_now();
+                webuiI2CDetectClient();
+                if (!g_i2c_claimed) break;
+                logmsg("WebUI: client detected late, ", (int)ms_now(), " ms after boot");
+            }
+
             // Probe for WebUI board by attempting a read
             bool got = webuiI2CReceive(&rx_cmd, rx_payload, &rx_length);
             if (got || webuiI2CWebUIPresent())
