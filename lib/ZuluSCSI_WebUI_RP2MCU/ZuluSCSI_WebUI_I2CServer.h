@@ -58,6 +58,7 @@
 #define I2C_SERVER_IP_ADDRESS_ACK         0x11  // Acknowledge I2C WebUI client IP address
 #define I2C_SERVER_DEVICE_LIST_JSON       0x12  // JSON array of removable device descriptors
 #define I2C_SERVER_SD_STATUS_CHANGE       0x13  // SD card presence changed; payload[0] = 0x00 not present, 0x01 present
+#define I2C_SERVER_RESCAN_ACK             0x14  // Rescan request taken; payload=[generation_hi][generation_lo][result] of the last completed rescan
 
 #define I2C_SERVER_SD_NOT_PRESENT 0x00
 #define I2C_SERVER_SD_PRESENT     0x01
@@ -78,6 +79,7 @@
 #define I2C_CLIENT_LOG_MSG                0x12  // Log message from I2C WebUI client ('n'/'d' prefix)
 #define I2C_CLIENT_FETCH_DEVICE_LIST      0x13  // Request list of removable SCSI devices
 #define I2C_CLIENT_INSERT_MEDIA           0x14  // Close tray / insert media; payload[0]=scsi_id
+#define I2C_CLIENT_RESCAN_SD_CARD         0x15  // Rescan the SD card (images, Create_ files, zuluscsi.ini)
 
 // ── Low-level I2C transceiver ────────────────────────────────────────────────
 

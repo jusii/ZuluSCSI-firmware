@@ -46,6 +46,10 @@
 
 extern SdFs SD;
 
+extern "C" void zuluscsi_request_rescan(const char *source);
+extern "C" uint16_t zuluscsi_rescan_generation();
+extern "C" uint8_t zuluscsi_rescan_result();
+
 #define CONFIGFILE "zuluscsi.ini"
 
 // ── State machine ─────────────────────────────────────────────────────────────
@@ -115,7 +119,8 @@ static void send_status_json()
 
     char json[480] = {0};
     int pos = 0;
-    pos += snprintf(json + pos, sizeof(json) - pos, "{\"sdPresent\":%s, \"devices\":[", g_sd_ready ? "true": "false");
+    pos += snprintf(json + pos, sizeof(json) - pos, "{\"sdPresent\":%s, \"rescanGeneration\":%d, \"rescanResult\":%d, \"devices\":[",
+        g_sd_ready ? "true": "false", (int)zuluscsi_rescan_generation(), (int)zuluscsi_rescan_result());
 
     for (int d = 0; d < dev_count && pos < (int)sizeof(json) - 80; d++)
     {
@@ -351,6 +356,17 @@ static void handle_client_message(uint8_t cmd, const uint8_t *payload, uint16_t 
                 logmsg("WebUI: controlInsertMedia failed for SCSI ID ", (int)scsi_id);
             }
             if (g_subscribed) send_status_json();
+            break;
+        }
+
+        case I2C_CLIENT_RESCAN_SD_CARD:
+        {
+            // The rescan runs later from the main loop; the client sees it
+            // finish when the status shows a higher generation.
+            uint16_t generation = zuluscsi_rescan_generation();
+            uint8_t ack[3] = {(uint8_t)(generation >> 8), (uint8_t)generation, zuluscsi_rescan_result()};
+            zuluscsi_request_rescan("WebUI");
+            webuiI2CSend(I2C_SERVER_RESCAN_ACK, ack, sizeof(ack));
             break;
         }
 
