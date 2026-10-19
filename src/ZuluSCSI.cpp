@@ -2360,7 +2360,12 @@ extern "C" void zuluscsi_setup(void)
     filename = nullptr;
     file.close();
     root.close();
+  }
 
+  // Also without a client at the boot-time probe: one powered together with
+  // this board answers later, and the WebUI task probes again for it.
+  if (g_sdcard_present)
+  {
     zuluWebUIInit();
   }
 #endif
